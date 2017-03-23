@@ -27,7 +27,7 @@ from keras.models import Sequential
 
 import tensorflow as tf
 
-N_TRAIN = 1000
+N_TRAIN = 200
 
 ##
 # Hyperparameters
@@ -96,12 +96,16 @@ def load_csv(data_dir='/input/'):
         # Skip the headers
         next(csv_reader, None)
         
-        csv_reader = itertools.islice(csv_reader, 1000)
+        csv_reader = itertools.islice(csv_reader, N_TRAIN)
         csv_reader = itertools.cycle(csv_reader)
         
         for center_img, left_img, right_img, steer_angle, throttle, brake, speed in csv_reader:
             image = load_image(data_dir + center_img)
-            yield image, np.array([float(steer_angle)])
+            
+            steer_angle = float(steer_angle)
+            
+            if -0.0001 < steer_angle < 0.0001:
+                yield np.resize(image, [1, ORIG_ROWS, ORIG_COLS, ORIG_CH]), np.array([steer_angle])
 
 def behavioral_cloning():
     
@@ -109,12 +113,12 @@ def behavioral_cloning():
     
     # Preprocessing in the model from @mohankarthik
 
-    model.add(Lambda(lambda x: x[50:150, :, :], name="ImageCropper", input_shape=(ORIG_ROWS, ORIG_COLS, ORIG_CH)))
-    model.add(Lambda(lambda x: tf.image.resize_images(x, (IMG_ROWS, IMG_COLS)), name="ImageResizer"))
-    model.add(Lambda(lambda x: x/127.5 - .5, name="ImageNormalizer"))
+    #model.add(Lambda(lambda x: x[50:150, :, :], name="ImageCropper", input_shape=(ORIG_ROWS, ORIG_COLS, ORIG_CH)))
+    #model.add(Lambda(lambda x: tf.image.resize_images(x, (IMG_ROWS, IMG_COLS)), name="ImageResizer"))
+    #model.add(Lambda(lambda x: x/127.5 - .5, name="ImageNormalizer"))
 
     # Color Space layer from @mohankarthik
-    model.add(Convolution2D(3, 1, padding='same', name="ColorSpaceConv"))
+    model.add(Convolution2D(3, 1, padding='same', name="ColorSpaceConv", input_shape=(ORIG_ROWS, ORIG_COLS, ORIG_CH)))
 
     ###########
     # Model:
@@ -153,12 +157,33 @@ def behavioral_cloning():
 
 
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description='Remote Driving')
+    parser.add_argument(
+        'data_dir',
+        type=str,
+        default="data/",
+        help='Data folder prefix. Add a slash to the end.'
+    )
+    parser.add_argument(
+        'logs_dir',
+        type=str,
+        default="tb_logs/",
+        help='Logs folder prefix. Add a slash to the end.'
+    )
+    
+    args = parser.parse_args()
+    
     model = behavioral_cloning()
-    data = data_augmenter(load_csv("data/"))
-
+    
+    data = data_augmenter(load_csv(args.data_dir))
+    
+    tb = keras.callbacks.TensorBoard(log_dir=args.logs_dir, write_graph=True)
+    cp = keras.callbacks.ModelCheckpoint("model-epoch-{epoch:02d}.h5")
+    
     # Keras 1.2 mods: epochs -> nb_epoch
     model.fit_generator(data,
         steps_per_epoch=N_TRAIN - (VALIDATION_SPLIT * N_TRAIN),
         validation_steps= VALIDATION_SPLIT * N_TRAIN,
-        epochs=EPOCHS)
+        epochs=EPOCHS,
+        callbacks=[tb, cp])
     model.save("model.h5")
