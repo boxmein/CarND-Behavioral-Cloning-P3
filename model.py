@@ -25,9 +25,13 @@ from keras.layers.convolutional import *
 from keras.layers.pooling import *
 from keras.models import Sequential
 
-N_TRAIN = 4000
+import tensorflow as tf
+
+N_TRAIN = 1000
+
 ##
 # Hyperparameters
+
 OPTIMIZER = 'adam'
 LOSS = 'mse'
 EPOCHS = 5
@@ -66,9 +70,15 @@ def crop_image(image):
     return image[50:150, :, :]
 
 def resize_image(image):
-    image = cv2.resize(image, (IMG_ROWS, IMG_COLS))
-    image = np.resize(image, (1, IMG_ROWS, IMG_COLS, IMG_CH))
+    image = tf.image.resize_images(x, (IMG_ROWS, IMG_COLS))
     return image
+
+def preprocess_image(image):
+    return resize_image(
+        crop_image(
+            image
+        )
+    )
 
 def data_augmenter(image_gen):
     for image, angle in image_gen:
@@ -91,31 +101,20 @@ def load_csv(data_dir='/input/'):
         
         for center_img, left_img, right_img, steer_angle, throttle, brake, speed in csv_reader:
             image = load_image(data_dir + center_img)
-            image = crop_image(image)
-            image = resize_image(image)
-            
-            steer_angle = float(steer_angle)
-            steer_angle = np.array([steer_angle])
-            
-            if xx == False:
-                xx = True
-                imsave("IMAGE.png", image[0])
-            
-            if abs(steer_angle) > 0.001:
-                yield image, steer_angle
+            yield image, np.array([float(steer_angle)])
 
 def behavioral_cloning():
     
     model = Sequential()
     
     # Preprocessing in the model from @mohankarthik
-    
-    model.add(Lambda(lambda x: x/127.5 - .5,
-                 input_shape=(IMG_ROWS, IMG_COLS, IMG_CH),
-                 output_shape=(IMG_ROWS, IMG_COLS, IMG_CH)))
+
+    model.add(Lambda(lambda x: x[50:150, :, :], name="ImageCropper", input_shape=(ORIG_ROWS, ORIG_COLS, ORIG_CH)))
+    model.add(Lambda(lambda x: tf.image.resize_images(x, (IMG_ROWS, IMG_COLS)), name="ImageResizer"))
+    model.add(Lambda(lambda x: x/127.5 - .5, name="ImageNormalizer"))
 
     # Color Space layer from @mohankarthik
-    model.add(Convolution2D(3, 1, padding='same'))
+    model.add(Convolution2D(3, 1, padding='same', name="ColorSpaceConv"))
 
     ###########
     # Model:
@@ -152,12 +151,14 @@ def behavioral_cloning():
     model.compile(optimizer=OPTIMIZER, loss=LOSS, metrics=['accuracy'])
     return model
 
-model = behavioral_cloning()
-data = data_augmenter(load_csv("data/"))
 
-# Keras 1.2 mods: epochs -> nb_epoch
-model.fit_generator(data,
-    steps_per_epoch=N_TRAIN - (VALIDATION_SPLIT * N_TRAIN),
-    validation_steps= VALIDATION_SPLIT * N_TRAIN,
-    epochs=EPOCHS)
-model.save("model.h5")
+if __name__ == "__main__":
+    model = behavioral_cloning()
+    data = data_augmenter(load_csv("data/"))
+
+    # Keras 1.2 mods: epochs -> nb_epoch
+    model.fit_generator(data,
+        steps_per_epoch=N_TRAIN - (VALIDATION_SPLIT * N_TRAIN),
+        validation_steps= VALIDATION_SPLIT * N_TRAIN,
+        epochs=EPOCHS)
+    model.save("model.h5")

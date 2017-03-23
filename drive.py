@@ -12,9 +12,10 @@ from PIL import Image
 from flask import Flask
 from io import BytesIO
 
-from keras.models import load_model
 import h5py
 from keras import __version__ as keras_version
+
+import tensorflow as tf
 
 sio = socketio.Server()
 app = Flask(__name__)
@@ -22,14 +23,6 @@ model = None
 prev_image_array = None
 
 import cv2
-
-def crop_image(image):
-    return image[50:150, :, :]
-
-def resize_image(image):
-    image = cv2.resize(image, (64, 64))
-    image = np.resize(image, (1, 64, 64, 3))
-    return image
 
 class SimplePIController:
     def __init__(self, Kp, Ki):
@@ -57,6 +50,7 @@ set_speed = 9
 controller.set_desired(set_speed)
 
 
+
 @sio.on('telemetry')
 def telemetry(sid, data):
     if data:
@@ -70,12 +64,7 @@ def telemetry(sid, data):
         imgString = data["image"]
         image = Image.open(BytesIO(base64.b64decode(imgString)))
         image_array = np.asarray(image)
-        image_array = crop_image(image_array)
-        image_array = resize_image(image_array)
-        
-        # cv2.imshow("A", image_array[0])
-        
-        steering_angle = float(model.predict(image_array, batch_size=1))
+        steering_angle = float(model.predict(image_array[None, :, :, :], batch_size=1))
 
         throttle = controller.update(float(speed))
 
