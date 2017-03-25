@@ -11,18 +11,17 @@ import eventlet.wsgi
 from PIL import Image
 from flask import Flask
 from io import BytesIO
-from keras.models import load_model
 
+from keras.models import load_model
 import h5py
 from keras import __version__ as keras_version
-
+import cv2
 
 sio = socketio.Server()
 app = Flask(__name__)
 model = None
 prev_image_array = None
 
-import cv2
 
 class SimplePIController:
     def __init__(self, Kp, Ki):
@@ -46,9 +45,8 @@ class SimplePIController:
 
 
 controller = SimplePIController(0.1, 0.002)
-set_speed = 12
+set_speed = 9
 controller.set_desired(set_speed)
-
 
 
 @sio.on('telemetry')
@@ -62,13 +60,13 @@ def telemetry(sid, data):
         speed = data["speed"]
         # The current image from the center camera of the car
         imgString = data["image"]
-        
         image = Image.open(BytesIO(base64.b64decode(imgString)))
         image_array = np.asarray(image)
-        image_array = cv2.cvtColor(image_array, cv2.COLOR_BGR2RGB)
-        image_array = image_array / 127.5 - 0.5
-        image_array = np.resize(image_array, [1, 160, 320, 3])
-        steering_angle = float(model.predict(image_array, batch_size=1))
+        #image_array = cv2.cvtColor(image_array, cv2.COLOR_BGR2RGB)
+        cv2.imshow("Image", image_array)
+        cv2.waitKey(3)
+        
+        steering_angle = float(model.predict(image_array[None, :, :, :], batch_size=1))
 
         throttle = controller.update(float(speed))
 

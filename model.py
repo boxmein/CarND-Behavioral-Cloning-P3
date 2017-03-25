@@ -27,11 +27,13 @@ from keras.layers.convolutional import *
 from keras.layers.pooling import *
 from keras.models import Sequential
 
+from keras.backend import resize_images
+
 import tensorflow as tf
 
 ##
 # Hyperparameters
-N_TRAIN = 500
+N_TRAIN = 2000
 
 OPTIMIZER = 'adam'
 LOSS = 'mse'
@@ -61,34 +63,16 @@ print("IMG_ROWS = ", IMG_ROWS)
 print("IMG_COLS = ", IMG_COLS)
 print("IMG_CH = ", IMG_CH)
 
-def reverse_image(image):
-    pass
-
-def color_jitter(image):
-    pass
-
-def crop_image(image):
-    return image[50:150, :, :]
-
-def resize_image(image):
-    image = tf.image.resize_images(x, (IMG_ROWS, IMG_COLS))
-    return image
-
-def preprocess_image(image):
-    return resize_image(
-        crop_image(
-            image
-        )
-    )
-
 def data_augmenter(image_gen):
     for image, angle in image_gen:
+        # Original
         yield image, angle
+        # Flipped
+        # yield cv2.flip(image, 0), -angle
+        
 
 def load_image(filename):
-    return imread(filename,
-                      flatten=False,
-                      mode='RGB')
+    return cv2.imread(filename)
 
 def load_csv(data_dir='/input/'):
     with open(data_dir + "driving_log.csv") as csv_file:
@@ -97,38 +81,32 @@ def load_csv(data_dir='/input/'):
         # Skip the headers
         next(csv_reader, None)
         
-        csv_reader = itertools.islice(csv_reader, N_TRAIN)
+        # csv_reader = itertools.islice(csv_reader, N_TRAIN)
         csv_reader = itertools.cycle(csv_reader)
         
         for center_img, left_img, right_img, steer_angle, throttle, brake, speed in csv_reader:
             image = load_image(data_dir + center_img)
             steer_angle = float(steer_angle)
-            if (steer_angle < -0.01 or steer_angle > 0.01) or random.random() > 0.9:
-                yield np.resize(image, [1, ORIG_ROWS, ORIG_COLS, ORIG_CH]), np.array([steer_angle])
+            
+            if (steer_angle < -0.01 or steer_angle > 0.01) or random.random() > 0.5:
+                yield image[np.newaxis, :, :, :], np.array([steer_angle])
             
 def behavioral_cloning():
     
     model = Sequential()
     
-    # Preprocessing in the model from @mohankarthik
-    
-    def resize_image(x):
-        import tensorflow as tf
-        return tf.image.resize_images(x, (IMG_ROWS, IMG_COLS))
-
-    model.add(Lambda(lambda x: x[50:150, :, :], name="ImageCropper", input_shape=(ORIG_ROWS, ORIG_COLS, ORIG_CH)))
-    model.add(Lambda(lambda x: resize_image(x), name="ImageResizer"))
-    model.add(Lambda(lambda x: x / 255.0 - 0.5, name="ImageNormalizer"))
+    # model.add(Lambda(lambda x: __import__("tensorflow").image.resize_images(x, (64, 64)), name="ImageResizer", input_shape=(160, 320, 3)))
+    # model.add(Lambda(lambda x: x / 255.0 - 0.5, name="ImageNormalizer"))
 
     # Color Space layer from @mohankarthik
-    model.add(Convolution2D(3, 1, padding='same', name="ColorSpaceConv"))
+    model.add(Convolution2D(3, 1, padding='same', name="ColorSpaceConv", input_shape=(160, 320, 3)))
 
     ###########
     # Model:
     ###########
     
     # Convolution + ReLU
-    model.add(Conv2D(16, 7, strides=2, activation="relu", use_bias=True))
+    model.add(Conv2D(16, 7, strides=2, activation="relu", use_bias=True, input_shape=(160, 320, 3)))
     # Max pooling
     model.add(MaxPooling2D((2,2), (1,1)))
 
@@ -158,25 +136,27 @@ def behavioral_cloning():
     model.compile(optimizer=OPTIMIZER, loss=LOSS, metrics=['accuracy'])
     return model
 
-
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Remote Driving')
     parser.add_argument(
         'data_dir',
         type=str,
         default="data/",
+        nargs="?",
         help='Data folder prefix. Add a slash to the end.'
     )
     parser.add_argument(
         'logs_dir',
         type=str,
         default="tb_logs/",
+        nargs="?",
         help='Logs folder prefix. Add a slash to the end.'
     )
     
     args = parser.parse_args()
     
     model = behavioral_cloning()
+    # model = nvidia_model()
     
     data = data_augmenter(load_csv(args.data_dir))
     
