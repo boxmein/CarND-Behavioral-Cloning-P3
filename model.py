@@ -13,11 +13,13 @@
 import csv
 from scipy.misc import imread, imsave
 import itertools
+import argparse
 
 # Model
 import numpy as np
 
 import cv2
+import random
 
 import keras
 from keras.layers import *
@@ -27,10 +29,9 @@ from keras.models import Sequential
 
 import tensorflow as tf
 
-N_TRAIN = 200
-
 ##
 # Hyperparameters
+N_TRAIN = 500
 
 OPTIMIZER = 'adam'
 LOSS = 'mse'
@@ -101,24 +102,26 @@ def load_csv(data_dir='/input/'):
         
         for center_img, left_img, right_img, steer_angle, throttle, brake, speed in csv_reader:
             image = load_image(data_dir + center_img)
-            
             steer_angle = float(steer_angle)
-            
-            if -0.0001 < steer_angle < 0.0001:
+            if (steer_angle < -0.01 or steer_angle > 0.01) or random.random() > 0.9:
                 yield np.resize(image, [1, ORIG_ROWS, ORIG_COLS, ORIG_CH]), np.array([steer_angle])
-
+            
 def behavioral_cloning():
     
     model = Sequential()
     
     # Preprocessing in the model from @mohankarthik
+    
+    def resize_image(x):
+        import tensorflow as tf
+        return tf.image.resize_images(x, (IMG_ROWS, IMG_COLS))
 
-    #model.add(Lambda(lambda x: x[50:150, :, :], name="ImageCropper", input_shape=(ORIG_ROWS, ORIG_COLS, ORIG_CH)))
-    #model.add(Lambda(lambda x: tf.image.resize_images(x, (IMG_ROWS, IMG_COLS)), name="ImageResizer"))
-    #model.add(Lambda(lambda x: x/127.5 - .5, name="ImageNormalizer"))
+    model.add(Lambda(lambda x: x[50:150, :, :], name="ImageCropper", input_shape=(ORIG_ROWS, ORIG_COLS, ORIG_CH)))
+    model.add(Lambda(lambda x: resize_image(x), name="ImageResizer"))
+    model.add(Lambda(lambda x: x / 255.0 - 0.5, name="ImageNormalizer"))
 
     # Color Space layer from @mohankarthik
-    model.add(Convolution2D(3, 1, padding='same', name="ColorSpaceConv", input_shape=(ORIG_ROWS, ORIG_COLS, ORIG_CH)))
+    model.add(Convolution2D(3, 1, padding='same', name="ColorSpaceConv"))
 
     ###########
     # Model:
