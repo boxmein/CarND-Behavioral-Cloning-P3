@@ -17,6 +17,7 @@ import argparse
 
 # Model
 import numpy as np
+import pandas as pd
 
 import cv2
 import random
@@ -27,22 +28,19 @@ from keras.layers.convolutional import *
 from keras.layers.pooling import *
 from keras.models import Sequential
 
-from keras.backend import resize_images
-
 import tensorflow as tf
 
 ##
 # Hyperparameters
-N_TRAIN = 2000
+N_TRAIN = 400
+TRAIN_IN_STEPS=20
+BATCH_SIZE = N_TRAIN // TRAIN_IN_STEPS
+VALIDATION_STEPS = 4
 
 OPTIMIZER = 'adam'
 LOSS = 'mse'
 EPOCHS = 5
 VALIDATION_SPLIT=0.1
-
-ORIG_ROWS = 160
-ORIG_COLS = 320
-ORIG_CH = 3
 
 IMG_ROWS = 64
 IMG_COLS = 64
@@ -63,41 +61,41 @@ print("IMG_ROWS = ", IMG_ROWS)
 print("IMG_COLS = ", IMG_COLS)
 print("IMG_CH = ", IMG_CH)
 
-def data_augmenter(image_gen):
-    for image, angle in image_gen:
-        # Original
-        yield image, angle
-        # Flipped
-        # yield cv2.flip(image, 0), -angle
-        
 
 def load_image(filename):
     return cv2.imread(filename)
 
 def load_csv(data_dir='/input/'):
-    with open(data_dir + "driving_log.csv") as csv_file:
-        xx = False
-        csv_reader = csv.reader(csv_file)
-        # Skip the headers
-        next(csv_reader, None)
-        
-        # csv_reader = itertools.islice(csv_reader, N_TRAIN)
-        csv_reader = itertools.cycle(csv_reader)
-        
-        for center_img, left_img, right_img, steer_angle, throttle, brake, speed in csv_reader:
-            image = load_image(data_dir + center_img)
-            steer_angle = float(steer_angle)
+    df = pd.read_csv(data_dir + "driving_log.csv", 
+                delimiter=',',
+                header=0,
+                names=['center','left','right','steering','throttle','brake','speed'])
+    segment = df.sample(n=N_TRAIN)
+    
+    images = segment["center"]
+    images = np.array([load_image(data_dir + i) for _, i in images.iteritems()])
+    print("Images loaded", images.shape)
+
+    angles = segment.apply(lambda row: float(row['steering']), axis=1).as_matrix()
+    print("Angles loaded", angles.shape)
+
+    while 1:
+        for i in range(TRAIN_IN_STEPS//2):
+            sub_images = images[i*BATCH_SIZE:i*BATCH_SIZE+BATCH_SIZE]
+            sub_flip = np.array([cv2.flip(i, 1) for i in sub_images])
+            sub_angles = angles[i*BATCH_SIZE:i*BATCH_SIZE+BATCH_SIZE]
             
-            if (steer_angle < -0.01 or steer_angle > 0.01) or random.random() > 0.5:
-                yield image[np.newaxis, :, :, :], np.array([steer_angle])
+            mask = (sub_angles < -0.001) | (sub_angles > 0.001)
+            
+            yield sub_images[mask], sub_angles[mask]
+            yield sub_flip[mask], -sub_angles[mask]
             
 def behavioral_cloning():
     
     model = Sequential()
     
-    # model.add(Lambda(lambda x: __import__("tensorflow").image.resize_images(x, (64, 64)), name="ImageResizer", input_shape=(160, 320, 3)))
-    # model.add(Lambda(lambda x: x / 255.0 - 0.5, name="ImageNormalizer"))
-
+    model.add(Lambda(lambda x: x / 255.0 - 0.5, name="ImageNormalizer", input_shape=(160, 320, 3)))
+    
     # Color Space layer from @mohankarthik
     model.add(Convolution2D(3, 1, padding='same', name="ColorSpaceConv", input_shape=(160, 320, 3)))
 
@@ -106,18 +104,27 @@ def behavioral_cloning():
     ###########
     
     # Convolution + ReLU
-    model.add(Conv2D(16, 7, strides=2, activation="relu", use_bias=True, input_shape=(160, 320, 3)))
+    model.add(Conv2D(4, 9, strides=1, activation="relu", use_bias=True, input_shape=(160, 320, 3)))
+    model.add(Conv2D(4, 7, strides=1, activation="relu", use_bias=True))
     # Max pooling
     model.add(MaxPooling2D((2,2), (1,1)))
 
     # Convolution + ReLU
-    model.add(Conv2D(16, 5, strides=2, activation="relu", use_bias=True))
+    model.add(Conv2D(8, 7, strides=1, activation="relu", use_bias=True))
+    model.add(Conv2D(8, 5, strides=1, activation="relu", use_bias=True))
     # Max pooling
     model.add(MaxPooling2D((2,2), (1,1)))
 
     # Convolution + ReLU
-    model.add(Conv2D(16, 3, strides=2, activation="relu", use_bias=True))
-    # Dropout
+    model.add(Conv2D(12, 5, strides=1, activation="relu", use_bias=True))
+    model.add(Conv2D(12, 3, strides=1, activation="relu", use_bias=True))
+    # Max pooling
+    model.add(MaxPooling2D((2,2), (1,1)))
+
+    # Convolution + ReLU
+    model.add(Conv2D(16, 3, strides=1, activation="relu", use_bias=True))
+    model.add(MaxPooling2D((2,2), (1,1)))
+
     model.add(Dropout(0.5))
     model.add(Flatten())
 
@@ -126,13 +133,12 @@ def behavioral_cloning():
     model.add(Dropout(0.5))
 
     # Second dense layer
-    model.add(Dense(128))
+    model.add(Dense(64))
     model.add(Dropout(0.5))
     
     # Third dense layer
     model.add(Dense(1))
 
-    
     model.compile(optimizer=OPTIMIZER, loss=LOSS, metrics=['accuracy'])
     return model
 
@@ -152,21 +158,29 @@ if __name__ == "__main__":
         nargs="?",
         help='Logs folder prefix. Add a slash to the end.'
     )
+
+    parser.add_argument(
+        'out_dir',
+        type=str,
+        default="./",
+        nargs="?",
+        help='Output folder prefix. Add a slash to the end.'
+    )
     
     args = parser.parse_args()
     
     model = behavioral_cloning()
     # model = nvidia_model()
     
-    data = data_augmenter(load_csv(args.data_dir))
+    data = load_csv(args.data_dir)
     
     tb = keras.callbacks.TensorBoard(log_dir=args.logs_dir, write_graph=True)
     cp = keras.callbacks.ModelCheckpoint("model-epoch-{epoch:02d}.h5")
     
     # Keras 1.2 mods: epochs -> nb_epoch
     model.fit_generator(data,
-        steps_per_epoch=N_TRAIN - (VALIDATION_SPLIT * N_TRAIN),
-        validation_steps= VALIDATION_SPLIT * N_TRAIN,
+        steps_per_epoch=TRAIN_IN_STEPS - VALIDATION_STEPS,
+        validation_steps=VALIDATION_STEPS,
         epochs=EPOCHS,
         callbacks=[tb, cp])
-    model.save("model.h5")
+    model.save(args.out_dir + "model.h5")
