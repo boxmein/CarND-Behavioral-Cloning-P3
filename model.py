@@ -32,14 +32,14 @@ import tensorflow as tf
 
 ##
 # Hyperparameters
-N_TRAIN = 400
+N_TRAIN = 1600
 TRAIN_IN_STEPS=20
 BATCH_SIZE = N_TRAIN // TRAIN_IN_STEPS
 VALIDATION_STEPS = 4
 
 OPTIMIZER = 'adam'
 LOSS = 'mse'
-EPOCHS = 5
+EPOCHS = 10
 VALIDATION_SPLIT=0.1
 
 IMG_ROWS = 64
@@ -82,7 +82,11 @@ def load_csv(data_dir='/input/'):
     while 1:
         for i in range(TRAIN_IN_STEPS//2):
             sub_images = images[i*BATCH_SIZE:i*BATCH_SIZE+BATCH_SIZE]
-            sub_flip = np.array([cv2.flip(i, 1) for i in sub_images])
+            sub_flip = np.empty(shape=sub_images.shape)
+            
+            for idx, img in enumerate(sub_images):
+                sub_flip[idx] = cv2.flip(img, 1)
+            
             sub_angles = angles[i*BATCH_SIZE:i*BATCH_SIZE+BATCH_SIZE]
             
             mask = (sub_angles < -0.001) | (sub_angles > 0.001)
@@ -94,10 +98,12 @@ def behavioral_cloning():
     
     model = Sequential()
     
-    model.add(Lambda(lambda x: x / 255.0 - 0.5, name="ImageNormalizer", input_shape=(160, 320, 3)))
+    model.add(Lambda(lambda x: __import__("tensorflow").image.resize_images(x, (64, 64)), input_shape=(160, 320, 3)))
+
+    # model.add(Lambda(lambda x: x / 255.0 - 0.5, name="ImageNormalizer"))
     
     # Color Space layer from @mohankarthik
-    model.add(Convolution2D(3, 1, padding='same', name="ColorSpaceConv", input_shape=(160, 320, 3)))
+    # model.add(Convolution2D(3, 1, padding='same', name="ColorSpaceConv", input_shape=(160, 320, 3)))
 
     ###########
     # Model:
