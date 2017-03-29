@@ -2,7 +2,7 @@ import csv
 import cv2
 import numpy as np
 
-from keras.layers import *
+from keras.layers.core import *
 from keras.layers.convolutional import *
 from keras.layers.pooling import *
 from keras.models import Sequential
@@ -16,11 +16,7 @@ data_dir = sys.argv[1] if len(sys.argv) > 1 else "./data/"
 out_dir = sys.argv[2] if len(sys.argv) > 2 else "./"
 
 lines = None
-
-with open(data_dir + "/driving_log.csv") as csvf:
-    reader = csv.reader(csvf)
-    next(reader) # Skip header row
-    lines = [line for line in reader]
+OFFSET = 0.25
 
 images = []
 measurements = []
@@ -31,8 +27,6 @@ def process_image(image):
     image = cv2.resize(image, (64, 64), interpolation=cv2.INTER_AREA)
     image = image / 255.0 - 0.5
     return image
-
-OFFSET = 0.25
 
 # Load an image.
 # Randomly decides to take images from the left/right/center camera and
@@ -66,16 +60,22 @@ def load_image(line):
 
     return image, measurement
 
-augmented_images = []
-augmented_measurements = []
+# 
+# Entry point: load data and images.
+# 
+
+with open(data_dir + "/driving_log.csv") as csvf:
+    reader = csv.reader(csvf)
+    next(reader) # Skip header row
+    lines = [line for line in reader]
 
 for line in lines:
     image, measurement = load_image(line)
-    augmented_images.append(image)
-    augmented_measurements.append(measurement)
+    images.append(image)
+    measurements.append(measurement)
 
-X_train = np.array(augmented_images)
-Y_train = np.array(augmented_measurements)
+X_train = np.array(images)
+Y_train = np.array(measurements)
 
 model = Sequential()
 
@@ -85,17 +85,25 @@ model.add(MaxPooling2D(pool_size=(2, 2), strides=(2, 2)))
 model.add(Convolution2D(50, (5, 5), padding="same", activation="relu"))
 model.add(MaxPooling2D(pool_size=(2, 2), strides=(2, 2)))
 
+model.add(Convolution2D(70, (3, 3), padding="valid", activation="relu"))
+model.add(MaxPooling2D(pool_size=(4, 4), strides=(1, 1)))
+
+
 model.add(Flatten())
 
-model.add(Dense(120, activation='relu'))
-model.add(Dense(84, activation='relu'))
+model.add(Dense(120, activation="relu"))
+model.add(Dropout(0.5))
+
+model.add(Dense(84, activation="relu"))
+model.add(Dropout(0.5))
+
 model.add(Dense(1))
 
 # Limit the size of training data to finish training on my laptop in meaningful time
-X_train, X_test, Y_train, Y_test = train_test_split(X_train, Y_train, train_size=3000, test_size=1000)
+X_train, X_test, Y_train, Y_test = train_test_split(X_train, Y_train, train_size=4000, test_size=1000)
 
 # callbacks
-checkpoint     = ModelCheckpoint("./model-{epoch}.h5")
+checkpoint = ModelCheckpoint("./model-{epoch}.h5")
 
 model.compile(loss="mse", optimizer="adam", metrics=["acc"])
 model.fit(X_train, Y_train, validation_split=0.2, shuffle=True, epochs=7, callbacks=[checkpoint])
