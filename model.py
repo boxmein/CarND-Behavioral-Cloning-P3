@@ -1,192 +1,106 @@
-#!/usr/bin/env python3
-# encoding: utf8
-# CarND: Behavioral Cloning
-# - Johannes Kadak 2017
-
-# https://medium.com/@mohankarthik/cloning-a-car-to-mimic-human-driving-5c2f7e8d8aff#.hktkdj33j
-# https://chatbotslife.com/using-augmentation-to-mimic-human-driving-496b569760a9#.hid7wp2m6
-# https://chatbotslife.com/using-augmentation-to-mimic-human-driving-496b569760a9#.hid7wp2m6
-
-
-
-# Data reading
 import csv
-from scipy.misc import imread, imsave
-import itertools
-import argparse
-
-# Model
-import numpy as np
-import pandas as pd
-
 import cv2
-import random
+import numpy as np
 
-import keras
 from keras.layers import *
 from keras.layers.convolutional import *
 from keras.layers.pooling import *
 from keras.models import Sequential
+from keras.callbacks import ProgbarLogger, ModelCheckpoint 
 
-import tensorflow as tf
+from sklearn.model_selection import train_test_split
 
-##
-# Hyperparameters
-N_TRAIN = 1600
-TRAIN_IN_STEPS=20
-BATCH_SIZE = N_TRAIN // TRAIN_IN_STEPS
-VALIDATION_STEPS = 4
+import sys
 
-OPTIMIZER = 'adam'
-LOSS = 'mse'
-EPOCHS = 10
-VALIDATION_SPLIT=0.1
+data_dir = sys.argv[1] if len(sys.argv) > 1 else "./data/"
+out_dir = sys.argv[2] if len(sys.argv) > 2 else "./"
 
-IMG_ROWS = 64
-IMG_COLS = 64
-IMG_CH = 3
-##
+lines = None
 
-print("VERSIONS")
-print("Keras: ", keras.__version__)
-print("Numpy: ", np.__version__)
-print("OpenCV: ", cv2.__version__)
-print("CONSTANTS")
-print("N_TRAIN = ", N_TRAIN)
-print("OPTIMIZER = ", OPTIMIZER)
-print("LOSS = ", LOSS)
-print("EPOCHS = ", EPOCHS)
-print("VALIDATION_SPLIT = ", VALIDATION_SPLIT)
-print("IMG_ROWS = ", IMG_ROWS)
-print("IMG_COLS = ", IMG_COLS)
-print("IMG_CH = ", IMG_CH)
+with open(data_dir + "/driving_log.csv") as csvf:
+    reader = csv.reader(csvf)
+    next(reader) # Skip header row
+    lines = [line for line in reader]
 
+images = []
+measurements = []
 
-def load_image(filename):
-    return cv2.imread(filename)
+def process_image(image):
+    image = image[50:image.shape[0]-25, :]
+    image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+    image = cv2.resize(image, (64, 64), interpolation=cv2.INTER_AREA)
+    image = image / 255.0 - 0.5
+    return image
 
-def load_csv(data_dir='/input/'):
-    df = pd.read_csv(data_dir + "driving_log.csv", 
-                delimiter=',',
-                header=0,
-                names=['center','left','right','steering','throttle','brake','speed'])
-    segment = df.sample(n=N_TRAIN)
+OFFSET = 0.25
+
+# Load an image.
+# Randomly decides to take images from the left/right/center camera and
+# randomly flips them.
+# Keeps data count constant while providing augmentation
+
+def load_image(line):
+    image_to_take = np.random.choice(3)
     
-    images = segment["center"]
-    images = np.array([load_image(data_dir + i) for _, i in images.iteritems()])
-    print("Images loaded", images.shape)
+    measurement = float(line[3])
 
-    angles = segment.apply(lambda row: float(row['steering']), axis=1).as_matrix()
-    print("Angles loaded", angles.shape)
+    # Center
+    if image_to_take == 0:
+        path = data_dir + "/IMG/" + line[0].split("/")[-1]
+    # Left
+    elif image_to_take == 1:
+        path = data_dir + "/IMG/" + line[1].split("/")[-1]
+        measurement += OFFSET
+    # Right
+    elif image_to_take == 2:
+        path = data_dir + "/IMG/" + line[2].split("/")[-1]
+        measurement -= OFFSET
 
-    while 1:
-        for i in range(TRAIN_IN_STEPS//2):
-            sub_images = images[i*BATCH_SIZE:i*BATCH_SIZE+BATCH_SIZE]
-            sub_flip = np.empty(shape=sub_images.shape)
-            
-            for idx, img in enumerate(sub_images):
-                sub_flip[idx] = cv2.flip(img, 1)
-            
-            sub_angles = angles[i*BATCH_SIZE:i*BATCH_SIZE+BATCH_SIZE]
-            
-            mask = (sub_angles < -0.001) | (sub_angles > 0.001)
-            
-            yield sub_images[mask], sub_angles[mask]
-            yield sub_flip[mask], -sub_angles[mask]
-            
-def behavioral_cloning():
-    
-    model = Sequential()
-    
-    model.add(Lambda(lambda x: __import__("tensorflow").image.resize_images(x, (64, 64)), input_shape=(160, 320, 3)))
+    image = cv2.imread(path)
+    image = process_image(image)
 
-    # model.add(Lambda(lambda x: x / 255.0 - 0.5, name="ImageNormalizer"))
-    
-    # Color Space layer from @mohankarthik
-    # model.add(Convolution2D(3, 1, padding='same', name="ColorSpaceConv", input_shape=(160, 320, 3)))
+    # Flip image arbitrarily
+    if np.random.uniform() > 0.5:
+        image = cv2.flip(image, 1)
+        measurement = -1.0 * measurement
 
-    ###########
-    # Model:
-    ###########
-    
-    # Convolution + ReLU
-    model.add(Conv2D(4, 9, strides=1, activation="relu", use_bias=True, input_shape=(160, 320, 3)))
-    model.add(Conv2D(4, 7, strides=1, activation="relu", use_bias=True))
-    # Max pooling
-    model.add(MaxPooling2D((2,2), (1,1)))
+    return image, measurement
 
-    # Convolution + ReLU
-    model.add(Conv2D(8, 7, strides=1, activation="relu", use_bias=True))
-    model.add(Conv2D(8, 5, strides=1, activation="relu", use_bias=True))
-    # Max pooling
-    model.add(MaxPooling2D((2,2), (1,1)))
+augmented_images = []
+augmented_measurements = []
 
-    # Convolution + ReLU
-    model.add(Conv2D(12, 5, strides=1, activation="relu", use_bias=True))
-    model.add(Conv2D(12, 3, strides=1, activation="relu", use_bias=True))
-    # Max pooling
-    model.add(MaxPooling2D((2,2), (1,1)))
+for line in lines:
+    image, measurement = load_image(line)
+    augmented_images.append(image)
+    augmented_measurements.append(measurement)
 
-    # Convolution + ReLU
-    model.add(Conv2D(16, 3, strides=1, activation="relu", use_bias=True))
-    model.add(MaxPooling2D((2,2), (1,1)))
+X_train = np.array(augmented_images)
+Y_train = np.array(augmented_measurements)
 
-    model.add(Dropout(0.5))
-    model.add(Flatten())
+model = Sequential()
 
-    # First dense layer
-    model.add(Dense(256))
-    model.add(Dropout(0.5))
+model.add(Convolution2D(20, (5, 5), padding="same", activation="relu", input_shape=(64, 64, 3)))
+model.add(MaxPooling2D(pool_size=(2, 2), strides=(2, 2)))
 
-    # Second dense layer
-    model.add(Dense(64))
-    model.add(Dropout(0.5))
-    
-    # Third dense layer
-    model.add(Dense(1))
+model.add(Convolution2D(50, (5, 5), padding="same", activation="relu"))
+model.add(MaxPooling2D(pool_size=(2, 2), strides=(2, 2)))
 
-    model.compile(optimizer=OPTIMIZER, loss=LOSS, metrics=['accuracy'])
-    return model
+model.add(Flatten())
 
-if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description='Remote Driving')
-    parser.add_argument(
-        'data_dir',
-        type=str,
-        default="data/",
-        nargs="?",
-        help='Data folder prefix. Add a slash to the end.'
-    )
-    parser.add_argument(
-        'logs_dir',
-        type=str,
-        default="tb_logs/",
-        nargs="?",
-        help='Logs folder prefix. Add a slash to the end.'
-    )
+model.add(Dense(120, activation='relu'))
+model.add(Dense(84, activation='relu'))
+model.add(Dense(1))
 
-    parser.add_argument(
-        'out_dir',
-        type=str,
-        default="./",
-        nargs="?",
-        help='Output folder prefix. Add a slash to the end.'
-    )
-    
-    args = parser.parse_args()
-    
-    model = behavioral_cloning()
-    # model = nvidia_model()
-    
-    data = load_csv(args.data_dir)
-    
-    tb = keras.callbacks.TensorBoard(log_dir=args.logs_dir, write_graph=True)
-    cp = keras.callbacks.ModelCheckpoint("model-epoch-{epoch:02d}.h5")
-    
-    # Keras 1.2 mods: epochs -> nb_epoch
-    model.fit_generator(data,
-        steps_per_epoch=TRAIN_IN_STEPS - VALIDATION_STEPS,
-        validation_steps=VALIDATION_STEPS,
-        epochs=EPOCHS,
-        callbacks=[tb, cp])
-    model.save(args.out_dir + "model.h5")
+# Limit the size of training data to finish training on my laptop in meaningful time
+X_train, X_test, Y_train, Y_test = train_test_split(X_train, Y_train, train_size=3000, test_size=1000)
+
+# callbacks
+checkpoint     = ModelCheckpoint("./model-{epoch}.h5")
+
+model.compile(loss="mse", optimizer="adam", metrics=["acc"])
+model.fit(X_train, Y_train, validation_split=0.2, shuffle=True, epochs=7, callbacks=[checkpoint])
+
+model.save(out_dir + "/model.h5")
+
+losses = model.test_on_batch(X_test, Y_test)
+print("Test loss: ", losses)

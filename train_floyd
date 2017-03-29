@@ -1,2 +1,2 @@
 #!/bin/sh
-floyd run --gpu --data wtcgHZ6F2KLM3z4eEszdeF "ls /input; ls /output; python3 model.py; echo DONE; ls /input; ls /output"
+floyd run --gpu --data wtcgHZ6F2KLM3z4eEszdeF "ls /input; ls /output; echo STARTING; python3 model.py /input/data/ /output/; echo DONE; ls /input; ls /output"

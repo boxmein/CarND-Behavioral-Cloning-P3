@@ -49,6 +49,15 @@ set_speed = 9
 controller.set_desired(set_speed)
 
 
+
+def process_image(image):
+    # Cropping
+    image = image[50:image.shape[0]-25, :]
+    # Resize to 64x64
+    image = cv2.resize(image, (64, 64), interpolation=cv2.INTER_AREA)
+    image = image / 255.0 - 0.5
+    return image
+
 @sio.on('telemetry')
 def telemetry(sid, data):
     if data:
@@ -62,7 +71,8 @@ def telemetry(sid, data):
         imgString = data["image"]
         image = Image.open(BytesIO(base64.b64decode(imgString)))
         image_array = np.asarray(image)
-        #image_array = cv2.cvtColor(image_array, cv2.COLOR_BGR2RGB)
+        image_array = process_image(image_array)
+
         cv2.imshow("Image", image_array)
         cv2.waitKey(3)
         
@@ -97,7 +107,6 @@ def send_control(steering_angle, throttle):
             'throttle': throttle.__str__()
         },
         skip_sid=True)
-
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Remote Driving')
