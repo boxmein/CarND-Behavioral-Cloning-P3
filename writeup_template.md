@@ -1,129 +1,204 @@
-#**Behavioral Cloning** 
+# **Behavioral Cloning** 
 
-##Writeup Template
+IT DRIVES! https://youtu.be/s0NYxGmi8uw
 
-###You can use this file as a template for your writeup if you want to submit it as a markdown file, but feel free to use some other method and submit a pdf if you prefer.
+## Writeup - Johannes Kadak
+
+This writeup follows the format in the writeup template, hopefully making the writeup more thorough
+and easier to grade.
+
+The model runs fine on Track 1, but was trained and runs semi-well on Track 2. I have given two
+model.h5 files in the zipfile, one for Track 1 (model.h5) and one for Track 2 (model-track-2.h5)
 
 ---
 
 **Behavioral Cloning Project**
 
 The goals / steps of this project are the following:
-* Use the simulator to collect data of good driving behavior
-* Build, a convolution neural network in Keras that predicts steering angles from images
-* Train and validate the model with a training and validation set
-* Test that the model successfully drives around track one without leaving the road
-* Summarize the results with a written report
-
-
-[//]: # (Image References)
-
-[image1]: ./examples/placeholder.png "Model Visualization"
-[image2]: ./examples/placeholder.png "Grayscaling"
-[image3]: ./examples/placeholder_small.png "Recovery Image"
-[image4]: ./examples/placeholder_small.png "Recovery Image"
-[image5]: ./examples/placeholder_small.png "Recovery Image"
-[image6]: ./examples/placeholder_small.png "Normal Image"
-[image7]: ./examples/placeholder_small.png "Flipped Image"
+* [X] Use the simulator to collect data of good driving behavior
+* [X] Build, a convolution neural network in Keras that predicts steering angles from images
+* [X] Train and validate the model with a training and validation set
+* [X] Test that the model successfully drives around track one without leaving the road
+* [X] Summarize the results with a written report
 
 ## Rubric Points
-###Here I will consider the [rubric points](https://review.udacity.com/#!/rubrics/432/view) individually and describe how I addressed each point in my implementation.  
+
+
+## # Here I will consider the [rubric points](https://review.udacity.com/#!/rubrics/432/view) individually and describe how I addressed each point in my implementation.  
 
 ---
-###Files Submitted & Code Quality
 
-####1. Submission includes all required files and can be used to run the simulator in autonomous mode
+### Files Submitted & Code Quality
+
+#### 1. Submission includes all required files and can be used to run the simulator in autonomous mode
 
 My project includes the following files:
-* model.py containing the script to create and train the model
-* drive.py for driving the car in autonomous mode
-* model.h5 containing a trained convolution neural network 
-* writeup_report.md or writeup_report.pdf summarizing the results
+* [X] model.py containing the script to create and train the model
+* [X] drive.py for driving the car in autonomous mode
+* [X] model.h5 containing a trained convolution neural network 
+* [X] writeup_report.md or writeup_report.pdf summarizing the results
+* video.mp4 showing the car driving
 
-####2. Submission includes functional code
-Using the Udacity provided simulator and my drive.py file, the car can be driven autonomously around the track by executing 
+#### 2. Submission includes functional code
+
+Make sure you have similar versions of the following packages:
+
+- Keras 2.0.1
+- Python 3.5.2
+- TensorFlow 0.12.1
+- OpenCV 3.1.0
+- Scikit Learn 0.18.1
+- Numpy 1.12.0
+
+Using the Udacity provided simulator and my drive.py file, the car can be driven autonomously around the track by executing:
+
 ```sh
-python drive.py model.h5
+python3 drive.py ./model.h5
 ```
 
-####3. Submission code is usable and readable
+#### 3. Submission code is usable and readable
 
-The model.py file contains the code for training and saving the convolution neural network. The file shows the pipeline I used for training and validating the model, and it contains comments to explain how the code works.
+The training script model.py defines the model and runs it against the recorded data. After training,
+it saves the model into a file named "./model.h5". It also saves checkpoints after every epoch as well
+as TensorBoard data.
 
-###Model Architecture and Training Strategy
+### Model Architecture and Training Strategy
 
-####1. An appropriate model architecture has been employed
+#### 1. An appropriate model architecture has been employed
 
-My model consists of a convolution neural network with 3x3 filter sizes and depths between 32 and 128 (model.py lines 18-24) 
+The model architecture consists of a modification of LeNet with deeper convolutional layers and
+a few applications of dropout.
 
-The model includes RELU layers to introduce nonlinearity (code line 20), and the data is normalized in the model using a Keras lambda layer (code line 18). 
+The layer architecture is as follows:
 
-####2. Attempts to reduce overfitting in the model
+| Layer | Layer Kind    | Size   | Stride | Kernel Count | Padding |
+|-------|---------------|--------|--------|--------------|---------|
+| 1     | Convolution2D | (5, 5) | (1, 1) | 20           | Same    |
+| 2     | ReLU          |        |        |              |         |
+| 3     | MaxPooling2D  | (2, 2) | (2, 2) |              | Valid   |
+| 4     | Convolution2D | (5, 5) | (1, 1) | 50           | Same    |
+| 5     | ReLU          |        |        |              |         |
+| 6     | MaxPooling2D  | (2, 2) | (2, 2) |              | Valid   |
+| 6     | Convolution2D | (3, 3) | (1, 1) | 70           | Same    |
+| 7     | ReLU          |        |        |              |         |
+| 8     | MaxPooling2D  | (4, 4) | (1, 1) |              | Valid   |
+| 9     | Flatten       |        |        |              |         |
+| 10    | Dense         | 120    |        |              |         |
+| 11    | ReLU          |        |        |              |         |
+| 12    | Dropout       | 0.5    |        |              |         |
+| 13    | Dense         | 84     |        |              |         |
+| 14    | ReLU          |        |        |              |         |
+| 15    | Dropout       | 0.5    |        |              |         |
+| 16    | Dense         | 1      |        |              |         |
 
-The model contains dropout layers in order to reduce overfitting (model.py lines 21). 
+#### 2. Attempts to reduce overfitting in the model
 
-The model was trained and validated on different data sets to ensure that the model was not overfitting (code line 10-16). The model was tested by running it through the simulator and ensuring that the vehicle could stay on the track.
+The model contains dropout layers in order to reduce overfitting (Layers 12 and 15, lines 158 and 161 in the source code). As well as that, the data is shuffled after every epoch and augmented with multiple methods.
 
-####3. Model parameter tuning
+#### 3. Model parameter tuning
 
-The model used an adam optimizer, so the learning rate was not tuned manually (model.py line 25).
+The only hyperparameter to tune while improving the model was the left-right steering offset when
+using left or right images. After experimenting, I left it at 0.25. 
 
-####4. Appropriate training data
+The learning rate was automatically scaled using the Adam optimizer.
 
-Training data was chosen to keep the vehicle driving on the road. I used a combination of center lane driving, recovering from the left and right sides of the road ... 
+#### 4. Appropriate training data
 
-For details about how I created the training data, see the next section. 
+I used Udacity training data to learn for Track 1, and my own recordings for Track 2. I augmented
+the training data by using left-right images to allow recovery learning and by flipping the image 
+horizontally. 
 
-###Model Architecture and Training Strategy
+### Model Architecture and Training Strategy
 
-####1. Solution Design Approach
+#### 1. Solution Design Approach
 
-The overall strategy for deriving a model architecture was to ...
+The model architecture was designed iteratively, but held back a lot by my issues with the "plumbing"
+of loading images into the model while training or driving. After a rewrite to a simpler LeNet-like
+approach, I achieved smaller losses and better performance on the road. 
 
-My first step was to use a convolution neural network model similar to the ... I thought this model might be appropriate because ...
+The neural net had to be convolutional, due to the convolutional network's power in detecting image
+features such as shapes of lanes or the curvature of the road. I used three layers of convolutions
+to allow the model to build a higher understanding of what it "sees", as well as a few fully 
+connected layers for regression learning.
 
-In order to gauge how well the model was working, I split my image and steering angle data into a training and validation set. I found that my first model had a low mean squared error on the training set but a high mean squared error on the validation set. This implied that the model was overfitting. 
+The model's image data was split into a training and validation set using Scikit Learn and run
+through a batch generator when actually training.
 
-To combat the overfitting, I modified the model so that ...
+In my first few approaches, the model was training well (often reaching up to 50% accuracy) but 
+validating badly and driving horribly. This indicated an overfit as well as issues with the pipeline.
 
-Then I ... 
+After a rewrite, the model was simple enough again to run on my laptop and train within reasonable time. The first iteration after the rewrite got past the "curve" and fell off the road right after, 
+indicating issues with data selection (seems like it only used the first ~1000 frames to train).
 
-The final step was to run the simulator to see how well the car was driving around track one. There were a few spots where the vehicle fell off the track... to improve the driving behavior in these cases, I ....
+After shuffling the data properly and improving the data pipeline, the training accuracy improved 
+but the model was still doing badly in curves and on the bridge.
 
-At the end of the process, the vehicle is able to drive autonomously around the track without leaving the road.
+I added another convolutional layer to improve with higher-level feature detection, and after that,
+the model's performance improved by a lot.
 
-####2. Final Model Architecture
+The vehicle's driving behavior with the new model was far better, going around the track after 
+training with just 1000 frames. I increased the size of the dataset and trained again, which
+improved the behaviour even more.
 
-The final model architecture (model.py lines 18-24) consisted of a convolution neural network with the following layers and layer sizes ...
+As an experiment, I also recorded data on Track 2 and trained an individual model on those frames
+alone. The model's behaviour on Track 2 was impressive and it circumnavigated the track on the first
+try, however did not stay in the right lane all the time (often cutting around corners in the other
+lane).
 
-Here is a visualization of the architecture (note: visualizing the architecture is optional according to the project rubric)
+At the end of the process, the vehicle is able to drive autonomously around Track 1 without leaving the road. Around Track 2, performance is still somewhat spotty, but it manages to drive far better
+than I assumed.
 
-![alt text][image1]
+#### 2. Final Model Architecture
 
-####3. Creation of the Training Set & Training Process
+The final model architecture is described in the table above as well as in the code (model.py lines
+144-163).
 
-To capture good driving behavior, I first recorded two laps on track one using center lane driving. Here is an example image of center lane driving:
+Here's a TensorBoard visualization of the model. (It didn't want to download a full-size PNG, so it
+is a screenshot)
 
-![alt text][image2]
+#### 3. Creation of the Training Set & Training Process
 
-I then recorded the vehicle recovering from the left side and right sides of the road back to center so that the vehicle would learn to .... These images show what a recovery looks like starting from ... :
+The training dataset I used to train Track 1 was from Udacity itself. The Track 2 data I recorded 
+myself.
 
-![alt text][image3]
-![alt text][image4]
-![alt text][image5]
+I recorded two laps of Track 2 data, trying to drive as smoothly as possible, but failing and
+recovering due to the complexity of the track. This might be beneficial in order to allow the network
+to learn recovering on its own even more. 
 
-Then I repeated this process on track two in order to get more data points.
+During runtime, the dataset was normalized and preprocessed like this:
 
-To augment the data sat, I also flipped images and angles thinking that this would ... For example, here is an image that has then been flipped:
+1. Load an image by randomly taking either the left, right or center image and offsetting the 
+   steering angle as necessary.
+2. Crop the image by removing the top 50 and bottom 25 pixels.
+   `image = image[ 50 : image.shape[0] - 25, :]` 
+   ![](./img/CroppedRandomImage.png)
+3. Transform the image's color space from BGR to RGB. (For fun, here's a HSV image where the plotter 
+   assumes it's RGB.)
+   ![](./img/HSVImage.png)
+4. Resize the image to 64x64x3 using inter-area interpolation. 
+   ![](./img/ResizedRandomImage.png)
+5. Normalize the image data using `image = image / 255.0 - 0.5`
+6. On a coin flip, decide to horizontally flip the image or pass it as-is to the model.
 
-![alt text][image6]
-![alt text][image7]
+The source code for it can be found in model.py lines 63-104. 
 
-Etc ....
+## Short Data Analysis
 
-After the collection process, I had X number of data points. I then preprocessed this data by ...
+The model data consists of 8036 entries and a total of 24108 images.
 
+The steering angles are distributed as follows:
 
-I finally randomly shuffled the data set and put Y% of the data into a validation set. 
+![](./img/SteeringAngleDistribution.png)
 
-I used this training data for training the model. The validation set helped determine if the model was over or under fitting. The ideal number of epochs was Z as evidenced by ... I used an adam optimizer so that manually training the learning rate wasn't necessary.
+The data consists of 160x320 images that look like this:
+
+![](./img/RandomImage.png)
+
+After preprocessing, the images look like this: 
+
+![](./img/ResizedRandomImage.png)
+
+Steering angles over time look like this:
+
+![](./img/SteeringAngleOverTime.png)
+
