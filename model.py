@@ -9,6 +9,7 @@ from keras.models import Sequential
 from keras.callbacks import ProgbarLogger, ModelCheckpoint 
 
 from sklearn.model_selection import train_test_split
+from sklearn.utils import shuffle
 
 import sys
 
@@ -17,6 +18,7 @@ out_dir = sys.argv[2] if len(sys.argv) > 2 else "./"
 
 lines = None
 OFFSET = 0.25
+BATCH_SIZE = 256
 
 images = []
 measurements = []
@@ -74,8 +76,22 @@ for line in lines:
     images.append(image)
     measurements.append(measurement)
 
-X_train = np.array(images)
-Y_train = np.array(measurements)
+def gen_image_data(lines):
+    while True:
+        for offset in range(0, len(lines), BATCH_SIZE):
+            batch_lines = lines[offset:offset+BATCH_SIZE]
+            images = []
+            measurements = []
+            
+            for line in batch_lines:
+                image, measurement = load_image(line)
+                images.append(image)
+                measurements.append(measurement)
+            
+            X_train = np.array(images)
+            Y_train = np.array(measurements)
+
+            yield shuffle(X_train, Y_train)
 
 model = Sequential()
 
@@ -88,7 +104,6 @@ model.add(MaxPooling2D(pool_size=(2, 2), strides=(2, 2)))
 model.add(Convolution2D(70, (3, 3), padding="valid", activation="relu"))
 model.add(MaxPooling2D(pool_size=(4, 4), strides=(1, 1)))
 
-
 model.add(Flatten())
 
 model.add(Dense(120, activation="relu"))
@@ -100,15 +115,19 @@ model.add(Dropout(0.5))
 model.add(Dense(1))
 
 # Limit the size of training data to finish training on my laptop in meaningful time
-X_train, X_test, Y_train, Y_test = train_test_split(X_train, Y_train, train_size=4000, test_size=1000)
+lines_train, lines_valid = train_test_split(lines, train_size=4096, test_size=1024)
+
+gen_train = gen_image_data(lines_train)
+gen_valid = gen_image_data(lines_valid)
 
 # callbacks
 checkpoint = ModelCheckpoint("./model-{epoch}.h5")
 
 model.compile(loss="mse", optimizer="adam", metrics=["acc"])
-model.fit(X_train, Y_train, validation_split=0.2, shuffle=True, epochs=7, callbacks=[checkpoint])
+model.fit_generator(gen_train, 
+    steps_per_epoch=len(lines_train) / BATCH_SIZE, 
+    validation_data=gen_valid, 
+    validation_steps=len(lines_valid) / BATCH_SIZE, 
+    epochs=7)
 
 model.save(out_dir + "/model.h5")
-
-losses = model.test_on_batch(X_test, Y_test)
-print("Test loss: ", losses)
