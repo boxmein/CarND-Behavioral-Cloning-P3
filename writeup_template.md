@@ -148,13 +148,29 @@ lane).
 At the end of the process, the vehicle is able to drive autonomously around Track 1 without leaving the road. Around Track 2, performance is still somewhat spotty, but it manages to drive far better
 than I assumed.
 
+Here's some stats about the trained model.
+
+Model loss over epochs:
+
+![](./img/ModelLossOverEpochs.png)
+
+Model validation loss over epochs:
+
+![](./img/ModelValidationLossOverEpochs.png)
+
+Model validation accuracy over epochs:
+
+![](./img/ModelValidationAccOverEpochs.png)
+
 #### 2. Final Model Architecture
 
 The final model architecture is described in the table above as well as in the code (model.py lines
 144-163).
 
-Here's a TensorBoard visualization of the model. (It didn't want to download a full-size PNG, so it
+Here's a TensorBoard visualization of the model. (It didn't want to let me download a full-size PNG, so it
 is a screenshot)
+
+![](./img/TensorBoardGraph.png)
 
 #### 3. Creation of the Training Set & Training Process
 
@@ -186,7 +202,13 @@ The source code for it can be found in model.py lines 63-104.
 
 The model data consists of 8036 entries and a total of 24108 images.
 
-The steering angles are distributed as follows:
+Here's some base parameters of the data:
+
+![](./img/DataBaseParameters.png)
+
+The steering angles are distributed as follows. Note how much the Udacity data biases zero steering
+over any other angle. Seems like it was gathered while driving with the keyboard. However, this doesn't
+affect my model, so I haven't taken action to reduce its occurrence in the training set.
 
 ![](./img/SteeringAngleDistribution.png)
 
